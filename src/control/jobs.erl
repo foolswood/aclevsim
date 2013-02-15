@@ -5,9 +5,7 @@
 %Job control module:
 %
 -module(jobs).
-
-%-compile(export_all).
--export([start/0, add/3, remove/2, list/1, get_task/1, task_done/1, task_fail/1]).
+-export([start/0, add/3, remove/2, list/1, task_get/1, task_done/1, task_fail/1, jobcontrol/2, test/0]).
 
 % Add job.
 %  Analyse job.
@@ -35,7 +33,7 @@
 % Report completion.
 % Report failure.
 
--record(job, {name, method, tasks=[]}).
+-record(job, {method, tasks=[]}).
 -record(jtasks, {active=orddict:new(), pending=[], complete=[]}).
 
 entask(Job) ->
@@ -44,86 +42,83 @@ entask(Job) ->
 %Job control functions
 
 jc_add(From, Jid, Job, JD, {ok, Tasks}) ->
-	From ! {self(), {ok, Jid}},
+	From ! {self(), ok},
 	orddict:store(Jid, Job#job{tasks=Tasks}, JD);
-jc_add(From, _, _, JD, {err, Msg}) ->
-	From ! {self(), {err, Msg}},
+jc_add(From, _, _, JD, {error, Msg}) ->
+	From ! {self(), {error, Msg}},
 	JD.
 
 %Job control task functions
 
-jct_add(JC, JD, Jid) ->
-	Tasks = orddict:fetch(Jid, JD)#job.tasks,
-	JC#jtasks{pending=[JC#jtasks.pending | Tasks]}.
-
-jct_foldrm(From, Task, {[Task|Others], Used, Acc, Msg}) ->
-	%Task matches
-	From ! Msg,
-	{[Used|Others], [], Acc};
-jct_foldrm(From, Task, {[], Used, Acc, Msg}) ->
-	%Tasks list empty
-	{Used, [], orddict:store(From, Task, Acc), Msg};
-jct_foldrm(From, Task, {[Head|Others], Used, Acc, Msg}) ->
-	%Task doesn't match but there are tasks in the list
-	jct_foldrm(From, Task, {Others, [Used|Head], Acc, Msg}).
+jct_add(JC, {ok, Tasks}) ->
+	JC#jtasks{pending=JC#jtasks.pending ++ Tasks};
+jct_add(JC, {error, _}) ->
+	JC.
 
 jct_rm(Tasks, Msg, Ord) ->
-	{_, _, Active, _} = orddict:fold(jct_foldrm, {Tasks, [], orddict:new(), Msg}, Ord),
-	Active.
+	Pred = fun(From, Task) ->
+		case lists:member(Task, Tasks) of
+			true ->
+				From ! {self(), Msg},
+				false;
+			false ->
+				true
+		end
+	end,
+	orddict:filter(Pred, Ord).
 
-jct_remove(JC, JD, Jid) ->
-	Tasks = orddict:fetch(Jid, JD)#job.tasks,
+jct_remove(JC, Job) ->
+	Tasks = Job#job.tasks,
 	Active = jct_rm(Tasks, stop, JC#jtasks.active),
 	%I think the -- operation is in C for speed, so maybe it would be better to do that first and remove results (if speed is a concern)
-	JC#jtasks{pending=JC#jtasks.pending -- Tasks, complete=JC#jtasks.complete -- Tasks, active=Active}
+	JC#jtasks{pending=JC#jtasks.pending -- Tasks, complete=JC#jtasks.complete -- Tasks, active=Active}.
 
-jct_assign(From, JC#jtasks{pending=[]}) ->
-	From ! ok,
-	JC;
-jct_assign(From, JC) ->
+jct_assign(From, JC) when length(JC#jtasks.pending) > 0 ->
 	[Task|Others] = JC#jtasks.pending,
-	From ! {start, Task},
-	JC#jtasks{active=orddict:store(From, Task, JC#jtasks.active), pending=Others}.
+	From ! {self(), {start, Task}},
+	JC#jtasks{active=orddict:store(From, Task, JC#jtasks.active), pending=Others};
+jct_assign(From, JC) ->
+	From ! {self(), notasks},
+	JC.
 
 jct_complete(From, JC) ->
-	Task = orddict:fetch(From, JC#jtasks.active),
-	Active = jct_rm([Task], ok, JC#jtasks.active),
-	JC#jtasks{active=Active, complete=[JC#jtasks.complete|Task]}.
+	Task = [orddict:fetch(From, JC#jtasks.active)],
+	Active = jct_rm(Task, ok, JC#jtasks.active),
+	JC#jtasks{active=Active, complete=JC#jtasks.complete ++ Task}.
 
 jct_repool(From, JC) ->
-	Task = orddict:fetch(From, JC#jtasks.active),
-	Active = jct_rm([Task], ok, JC#jtasks.active),
-	JC#jtasks{active=Active, pending=[JC#jtasks.pending|Task]}.
+	Task = [orddict:fetch(From, JC#jtasks.active)],
+	Active = jct_rm(Task, ok, JC#jtasks.active),
+	JC#jtasks{active=Active, pending=JC#jtasks.pending ++ Task}.
 
 %Job control
 
 jobcontrol(JD, JC) ->
 	receive
 		{From, {add, Jid, Job}} ->
-			From ! "In",
-			Key_exists = orddict:is_key(Jid, JD),
-			From ! Key_exists,
-			NJD = if Key_exists == true ->
-					From ! {self(), {error, "Invalid Job ID"}};
-				Key_exists == false ->
-					jc_add(From, Jid, Job, JD, JC, entask(Job)),
-					jct_add(JC, JD, Jid)
-				end,
-			jobcontrol(NJD);
-		{From, {remove, Jid}} -> 
+			case orddict:is_key(Jid, JD) of
+				true ->
+					From ! {self(), {error, "Invalid Job ID"}},
+					jobcontrol(JD, JC);
+				false ->
+					Tasks = entask(Job),
+					jobcontrol(jc_add(From, Jid, Job, JD, Tasks), jct_add(JC, Tasks))
+			end;
+		{From, {remove, Jid}} -> %Add a check for valid from
 			From ! {self(), ok},
-			jct_remove(JC, JD, Jid),
-			jobcontrol(orddict:erase(Jid, JD));
+			jobcontrol(orddict:erase(Jid, JD), jct_remove(JC, orddict:fetch(Jid, JD)));
 		{From, list} ->
-			From ! {self(), orddict:to_list(JD)},
-			jobcontrol(JD);
+			From ! {self(), {list, orddict:to_list(JD)}},
+			jobcontrol(JD, JC);
 		{From, {task, ready}} ->
-			jobcontrol(JD, jct_assign(From, JC);
+			jobcontrol(JD, jct_assign(From, JC));
 		{From, {task, ok}} ->
-			jobcontrol(JD, jct_complete(From, JC);
+			jobcontrol(JD, jct_complete(From, JC));
 		{From, {task, error}} ->
-			From ! {self(), ok},
 			jobcontrol(JD, jct_repool(From, JC));
+		{From, inspect} ->
+			From ! {JD, JC},
+			jobcontrol(JD, JC);
 		terminate ->
 			ok
 	end.
@@ -136,36 +131,66 @@ start() ->
 add(Pid, Jid, Job) ->
 	Pid ! {self(), {add, Jid, Job}},
 	receive
-		{Pid, Msg} -> Msg
+		{Pid, ok} -> ok;
+		{Pid, {error, Msg}} -> {error, Msg}
 	end.
 
 remove(Pid, Jid) ->
 	Pid ! {self(), {remove, Jid}},
 	receive
-		{Pid, Msg} -> Msg
+		{Pid, ok} -> ok
 	end.
 
 list(Pid) ->
 	Pid ! {self(), list},
 	receive
-		{Pid, Msg} -> Msg
+		{Pid, {list, Msg}} -> Msg
 	end.
 
 task_get(Pid) ->
 	Pid ! {self(), {task, ready}},
 	receive
-		{start, Task} -> {ok, Task};
-		ok -> {error, notasks}
+		{Pid, {start, Task}} -> {ok, Task};
+		{Pid, notasks} -> {error, notasks}
 	end.
 
 task_done(Pid) ->
 	Pid ! {self(), {task, ok}},
 	receive
-		ok -> ok
+		{Pid, ok} -> ok
 	end.
 
 task_fail(Pid) ->
 	Pid ! {self(), {task, error}},
 	receive
-		ok -> ok
+		{Pid, ok} -> ok
 	end.
+
+%Testing
+
+test() ->
+	%Start
+	J = start(),
+	%Add
+	ok = add(J, "Test1", #job{method="Somemethod"}),
+	ok = add(J, "Test2", #job{method="Somemethod"}),
+	{error, "Invalid Job ID"} = add(J, "Test2", #job{method="Somemethod"}),
+	%List
+	[_, _] = list(J), %Not exactly exaustive
+	%Task functions
+	{ok, 'a'} = task_get(J),
+	ok = task_done(J),
+	{ok, 'b'} = task_get(J),
+	ok = task_fail(J),
+	{ok, 'c'} = task_get(J),
+	%Remove
+	ok = remove(J, "Test1"),
+	receive
+		{J, stop} -> ok
+	end,
+	%More task functions
+	{ok, 'b'} = task_get(J),
+	ok = task_done(J),
+	{error, notasks} = task_get(J),
+	ok.
+	%J ! {self(), inspect}.
