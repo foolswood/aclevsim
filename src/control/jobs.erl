@@ -82,14 +82,14 @@ jct_assign(From, JC) ->
 	JC.
 
 jct_complete(From, JC) ->
-	Task = [orddict:fetch(From, JC#jtasks.active)],
-	Active = jct_rm(Task, ok, JC#jtasks.active),
-	JC#jtasks{active=Active, complete=JC#jtasks.complete ++ Task}.
+	Task = orddict:fetch(From, JC#jtasks.active),
+	Active = jct_rm([Task], ok, JC#jtasks.active),
+	JC#jtasks{active=Active, complete=[Task | JC#jtasks.complete]}.
 
 jct_repool(From, JC) ->
-	Task = [orddict:fetch(From, JC#jtasks.active)],
-	Active = jct_rm(Task, ok, JC#jtasks.active),
-	JC#jtasks{active=Active, pending=JC#jtasks.pending ++ Task}.
+	Task = orddict:fetch(From, JC#jtasks.active),
+	Active = jct_rm([Task], ok, JC#jtasks.active),
+	JC#jtasks{active=Active, pending=[Task | JC#jtasks.pending]}.
 
 %Job control
 
@@ -182,15 +182,16 @@ test() ->
 	ok = task_done(J),
 	{ok, 'b'} = task_get(J),
 	ok = task_fail(J),
-	{ok, 'c'} = task_get(J),
+	{ok, 'b'} = task_get(J),
 	%Remove
 	ok = remove(J, "Test1"),
 	receive
 		{J, stop} -> ok
 	end,
 	%More task functions
-	{ok, 'b'} = task_get(J),
+	{ok, 'c'} = task_get(J),
 	ok = task_done(J),
 	{error, notasks} = task_get(J),
+	J ! terminate,
 	ok.
 	%J ! {self(), inspect}.
