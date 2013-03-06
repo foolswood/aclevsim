@@ -93,6 +93,12 @@ jct_repool(From, JC) ->
 
 %Job control
 
+node_join(JC) ->
+	JC ! {From, {node, {register, NodeInfo}},
+	receive
+		ok -> ok
+	end.
+
 jobcontrol(JD, JC) ->
 	receive
 		{From, {add, Jid, Job}} ->
@@ -116,6 +122,8 @@ jobcontrol(JD, JC) ->
 			jobcontrol(JD, jct_complete(From, JC));
 		{From, {task, error}} ->
 			jobcontrol(JD, jct_repool(From, JC));
+		{From, {node, Details}} ->
+			JC = jcn(From, Details)
 		{From, inspect} ->
 			From ! {JD, JC},
 			jobcontrol(JD, JC);

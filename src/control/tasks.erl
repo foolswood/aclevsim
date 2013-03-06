@@ -5,6 +5,9 @@
 -compile(export_all).
 %-export([add/2, hello/0, greet_and_add_two/1]).
 
+%Register node capabilities
+start(JC) ->
+
 %Task control:
 % Launch task:
 %   poll until task available

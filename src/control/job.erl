@@ -53,6 +53,11 @@ check_excite({file, Path, Hash}, N) ->
 check_excite({const, R, I}, _) when is_number(R) and is_number(I) ->
 	ok.
 
+mat_mem(A, B, real) ->
+	A*B*?FloatSize;
+mat_mem(A, B, complex) ->
+	A*B*2*?FloatSize.
+
 get_geom({emitter, {Points, AR, Excite}}) ->
 	{N, Pts} = n_points(Points),
 	check_ar(AR, N),
