@@ -5,7 +5,7 @@
 %Job control module:
 %
 -module(job).
--export([test/0]).
+-export([test/0, create_job/5, params/1, geoms/1, refl/1]).
 
 -record(job, {freq, c, rho, refl, geoms}).
 
@@ -17,11 +17,14 @@
 create_job(Freq, C, Rho, Refl, Geoms) when is_number(Freq) and is_number(C) and is_number(Rho) and is_integer(Refl) and is_list(Geoms) ->
 	#job{freq=Freq, c=C, rho=Rho, refl=Refl, geoms=Geoms}.
 
-params(Job) where is_record(Job, job) ->
+params(Job) when is_record(Job, job) ->
 	{Job#job.freq, Job#job.c, Job#job.rho}.
 
-geoms(Job) where is_record(Job, job) ->
+geoms(Job) when is_record(Job, job) ->
 	Job#job.geoms.
 
-n_refl(Job) where is_record(Job, job) ->
+refl(Job) when is_record(Job, job) ->
 	Job#job.refl.
+
+test() ->
+	ok.

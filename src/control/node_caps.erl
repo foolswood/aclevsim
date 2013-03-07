@@ -1,4 +1,4 @@
--module(nodecaps).
+-module(node_caps).
 -export([test/0]).
 
 -record(node, {mem, cpu}).

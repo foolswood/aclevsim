@@ -1,6 +1,6 @@
 -module(job_inst).
 
--export([test/0, job_to_ins/1, get_ins/1, do_in/2]).
+-export([test/0, job_to_ins/1, get_ins/1, do_in/3]).
 
 %Aclevsim
 %David Honour 2013
@@ -36,7 +36,7 @@ update_in(Dg, V, Status) ->
 	{V, Prev} = digraph:vertex(Dg, V),
 	digraph:add_vertex(Dg, V, Prev#in{status=Status}).
 
-get_ins({Start, {_, Ins}}) ->
+get_ins({Start, Ins}) ->
 	%get an not done instruction (if possible)
 	U = fun (V) ->
 		{V, L} = digraph:vertex(Ins, V),
@@ -80,7 +80,8 @@ job_to_ins(Job) ->
 		{[Result | Results], NewIns}
 	end,
 	{Results, Ins} = lists:foldl(For_Measure, {[], new_ins()}, Measures),
-	add_in(ok, Results, Ins).
+	{Start, {_, AllIns}} = add_in(ok, Results, Ins),
+	{Start, AllIns}.
 
 add_in(In, Deps, {Od, Dg}) ->
 	case orddict:find({In, Deps}, Od) of
@@ -169,11 +170,21 @@ test(I, InPrint, Comp, Acc) ->
 %Functions for actually doing the instructions
 
 gen_tm(A, B, Freq, Rho, C) ->
-	matrix:size(geom:size(A), geom:size(B), complex).
+	matrix:size(geom:n_points(A), geom:n_points(B), complex).
 
 %stitch_tm(A, B)
 
 %composite_tm(A, B, MORE_STUFF)
 
-do_in(Job, In) ->
-	gen_tm(ok, ok, ok, ok, ok).
+do_in(Job, InId, Ins) ->
+	Gin = fun(I) ->
+		{I, R} = digraph:vertex(Ins, I),
+		R
+	end,
+	In = Gin(InId),
+	Args = lists:map(Gin, digraph:out_neighbours(Ins, InId)),
+	update_in(Ins, InId, inprogress),
+	io:format("~p~n", [{In, Args}]),
+	%gen_tm(ok, ok, ok, ok, ok),
+	update_in(Ins, InId, complete),
+	ok.

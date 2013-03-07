@@ -91,13 +91,18 @@ jct_repool(From, JC) ->
 	Active = jct_rm([Task], ok, JC#jtasks.active),
 	JC#jtasks{active=Active, pending=[Task | JC#jtasks.pending]}.
 
+%Job control node functions
+
+%jcn(From, Details) ->
+%	ok.
+
 %Job control
 
-node_join(JC) ->
-	JC ! {From, {node, {register, NodeInfo}},
-	receive
-		ok -> ok
-	end.
+%node_join(JC) ->
+%	JC ! {From, {node, {register, NodeInfo}}},
+%	receive
+%		ok -> ok
+%	end.
 
 jobcontrol(JD, JC) ->
 	receive
@@ -122,8 +127,8 @@ jobcontrol(JD, JC) ->
 			jobcontrol(JD, jct_complete(From, JC));
 		{From, {task, error}} ->
 			jobcontrol(JD, jct_repool(From, JC));
-		{From, {node, Details}} ->
-			JC = jcn(From, Details)
+		%{From, {node, Details}} ->
+		%	JC = jcn(From, Details);
 		{From, inspect} ->
 			From ! {JD, JC},
 			jobcontrol(JD, JC);

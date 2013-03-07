@@ -5,7 +5,7 @@
 %Job control module:
 %
 -module(geom).
--export([test/0, n_points/1, emitters/1, elements/1, measures/1]).
+-export([test/0, n_points/1, emitters/1, elements/1, measures/1, get_geom/1]).
 
 -record(emitter, {n, points, ar, excite}).
 -record(element, {n, points, ar}).
@@ -22,22 +22,22 @@ filesize(Path) ->
 	NStr = lists:takewhile(FSpace, HRtn),
 	list_to_integer(NStr).
 
-check_geom({file, NPoints, Path, Hash}) when is_number(NPoints) ->
+check_points({file, NPoints, Path, Hash}) when is_number(NPoints) ->
 	Size = matrix:mem(NPoints, 3, real),
 	Size = filesize(Path),
 	Hash = md5sum(Path),
 	{NPoints, {file, Path, Hash}};
-check_geom({plane, A, B, Res}) ->
+check_points({plane, A, B, C, Res}) ->
 	%Verify A and B are vectors.
 	{XRes, YRes} = Res,
-	{XRes*YRes, {plane, A, B, Res}}.
+	{XRes*YRes, {plane, A, B, C, Res}}.
 
 check_ar({file, Path, Hash}, N) ->
 	Size = matrix:mem(N, 1, real),
 	Size = filesize(Path),
 	Hash = md5sum(Path),
 	ok;
-check_ar({const, C}, _) when C > 0 ->
+check_ar({const, C}, _) when C >= 0 ->
 	ok.
 
 check_excite({file, Path, Hash}, N) ->
@@ -48,17 +48,17 @@ check_excite({file, Path, Hash}, N) ->
 check_excite({const, R, I}, _) when is_number(R) and is_number(I) ->
 	ok.
 
-get_geom({emitter, {Points, AR, Excite}}) ->
-	{N, Pts} = check_geom(Points),
+get_geom({emitter, Points, AR, Excite}) ->
+	{N, Pts} = check_points(Points),
 	check_ar(AR, N),
 	check_excite(Excite, N),
 	#emitter{n=N, points=Pts, ar=AR, excite=Excite};
-get_geom({element, {Points, AR}}) ->
-	{N, Pts} = check_geom(Points),
+get_geom({element, Points, AR}) ->
+	{N, Pts} = check_points(Points),
 	check_ar(AR, N),
 	#element{n=N, points=Pts, ar=AR};
-get_geom({measure, {Points}}) ->
-	{N, Pts} = check_geom(Points),
+get_geom({measure, Points}) ->
+	{N, Pts} = check_points(Points),
 	#measure{n=N, points=Pts}.
 
 n_points(Geom) when is_record(Geom, emitter) or is_record(Geom, element) or is_record(Geom, measure) ->
