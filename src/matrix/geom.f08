@@ -29,3 +29,16 @@ SUBROUTINE gen_plane(center, aside, bside, res, pts)
                 END DO
         END DO
 END SUBROUTINE gen_plane
+
+SUBROUTINE gen_line(center, line, res, pts)
+        IMPLICIT NONE
+        REAL, INTENT(IN) :: center(3), line(3)
+        INTEGER, INTENT(IN) :: res
+        REAL, INTENT(OUT) :: pts(3, res)
+        INTEGER :: i
+        REAL :: step(3)
+        step = line/(res - 1)
+        DO i = 0, res-1
+                pts(:,i+1) = center + (i*step) - (line/2)
+        END DO
+END SUBROUTINE
