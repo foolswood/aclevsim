@@ -1,9 +1,10 @@
 SUBROUTINE gen_tm(a, b, k, tm)
         IMPLICIT NONE
         REAL, INTENT(IN) :: a(:,:), b(:,:), k
-        COMPLEX, INTENT(OUT) :: tm(SIZE(b,2),SIZE(a,2))
+        COMPLEX, ALLOCATABLE, INTENT(OUT) :: tm(:,:)
         INTEGER :: i, j
         REAL :: r
+        ALLOCATE(tm(SIZE(b,2),SIZE(a,2)))
         !$OMP PARALLEL SHARED(a, b, k, tm) PRIVATE(i,j,r)
         !$OMP DO
         DO i = 1, SIZE(a,2)
