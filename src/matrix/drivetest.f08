@@ -1,87 +1,147 @@
 !Transfer matrix generator
 PROGRAM test
         IMPLICIT NONE
+        TYPE geom
+                REAL, ALLOCATABLE :: geom(:,:)
+        END TYPE
+        TYPE cvector
+                COMPLEX, ALLOCATABLE :: v(:)
+        END TYPE
         INTERFACE
-                SUBROUTINE gen_plane(center, aside, bside, res, pts)
+                SUBROUTINE geom_plane(center, aside, bside, res, pts)
                         REAL, INTENT(IN) :: center(3), aside(3), bside(3)
                         INTEGER, INTENT(IN) :: res(2)
-                        REAL, INTENT(OUT) :: pts(4,res(1)*res(2))
-                END SUBROUTINE gen_plane
-                SUBROUTINE gen_tm(a, b, k, tm)
+                        REAL, ALLOCATABLE, INTENT(OUT) :: pts(:,:)
+                END SUBROUTINE
+                SUBROUTINE geom_line(center, line, res, pts)
+                        REAL, INTENT(IN) :: center(3), line(3)
+                        INTEGER, INTENT(IN) :: res
+                        REAL, ALLOCATABLE, INTENT(OUT) :: pts(:,:)
+                END SUBROUTINE
+                SUBROUTINE geom_load(Path, isMeas, Npoints, pts)
+                        CHARACTER(LEN=*), INTENT(IN) :: Path
+                        LOGICAL, INTENT(IN) :: isMeas
+                        INTEGER, INTENT(IN) :: Npoints
+                        REAL, ALLOCATABLE, INTENT(OUT) :: pts(:,:)
+                END SUBROUTINE
+                SUBROUTINE tm_gen(a, b, k, tm)
                         REAL, INTENT(IN) :: a(:,:), b(:,:), k
                         COMPLEX, ALLOCATABLE, INTENT(OUT) :: tm(:,:)
                 END SUBROUTINE
-                SUBROUTINE save_tm(Id, k, tm)
-                        REAL, INTENT(IN) :: k
-                        CHARACTER(LEN=*), INTENT(IN) :: Id
+                SUBROUTINE tm_save(Path, tm)
+                        CHARACTER(LEN=*), INTENT(IN) :: Path
                         COMPLEX, ALLOCATABLE, INTENT(IN) :: tm(:,:)
                 END SUBROUTINE
-                SUBROUTINE load_tm(Id, asize, bsize, k, tm)
-                        REAL, INTENT(IN) :: k
+                SUBROUTINE tm_load(Path, asize, bsize, tm)
                         INTEGER, INTENT(IN) :: asize, bsize
-                        CHARACTER(LEN=*), INTENT(IN) :: Id
+                        CHARACTER(LEN=*), INTENT(IN) :: Path
                         COMPLEX, ALLOCATABLE, INTENT(OUT) :: tm(:,:)
                 END SUBROUTINE
+                SUBROUTINE result_save(Path, cr)
+                        CHARACTER(LEN=*), INTENT(IN) :: Path
+                        COMPLEX, ALLOCATABLE, INTENT(IN) :: cr(:)
+                END SUBROUTINE
         END INTERFACE
-        REAL, PARAMETER :: PI = 3.141592653589793238462643383279502884197169399375
-        REAL, PARAMETER :: c = 1481, rho = 1, RC = 0.2, omega = 7e6*2*PI
-        REAL, PARAMETER :: k = omega/c
-        INTEGER, PARAMETER :: long_detail = 285, short_detail = 38, meas_detail = 81 !A little over 4 per wavelength
-        REAL :: center(3) = (/ 0.01835, 0.0, 0.0 /), aside(3) = (/ 0.0, 0.015, 0.0 /), bside(3) = (/ 0.0, 0.0, 0.002 /)
-        INTEGER :: res(2) = (/ long_detail, short_detail /)
-        REAL :: emitA(4,long_detail*short_detail), emitB(4,long_detail*short_detail), meas(4,meas_detail**2), r(meas_detail**2)
-        !COMPLEX :: tm(meas_detail**2, long_detail*short_detail), p(long_detail*short_detail) = 1, cr(meas_detail**2)
-        COMPLEX :: p(long_detail*short_detail) = 1, cr(meas_detail**2)
-        INTEGER :: pc, col
+        !Configuration constants
+        INTEGER, PARAMETER :: n_geoms = 4, n_cv = 6
+        !Program state variables
+        REAL :: k, lambda
+        REAL :: center(3), avec(3), bvec(3)
+        INTEGER :: res(2)
+        TYPE(geom) :: geoms(n_geoms)
+        TYPE(cvector) :: cv(n_cv)
         COMPLEX, ALLOCATABLE :: tm(:,:)
-        CALL gen_plane(center, aside, bside, res, emitA)
-        center = (/ -0.01835, 0.0, 0.0 /)
-        aside = (/ 0.0, 0.015, 0.0 /)
-        bside = (/ 0.0, 0.0, 0.002 /)
-        CALL gen_plane(center, aside, bside, res, emitB)
-        center = (/ 0.0, 0.0, 0.0 /)
-        aside = (/ 0.001, 0.0, 0.0 /)
-        bside = (/ 0.0, 0.001, 0.0 /)
-        CALL gen_plane(center, aside, bside, (/ meas_detail, meas_detail /), meas)
-        !CALL gen_tm(emitA, meas, k, tm)
-        !cr = MATMUL(tm, p)
-        !CALL save_tm('a', 'b', k, tm)
-        !DEALLOCATE(tm)
-        pc = (meas_detail**2)/2
-        CALL gen_tm(emitB, meas(:,:pc), k, tm)
-        cr(:pc) = MATMUL(tm, p)
-        DEALLOCATE(tm)
-        CALL gen_tm(emitB, meas(:,pc:), k, tm)
-        cr(pc:) = MATMUL(tm, p)
-        DEALLOCATE(tm)
-        CALL load_tm('ab', SIZE(emitA,2), SIZE(meas,2), k, tm)
-        cr = cr + MATMUL(tm, p)
-        r = ABS(cr)**2
-        OPEN(10,file='testresult.dat')
-        DO pc = 0,meas_detail-1
-                write(10,*) (r((pc*meas_detail)+col), col=1,meas_detail)
+        !Control system
+        CHARACTER(LEN=16) :: cmd
+        CHARACTER(LEN=256) :: path
+        INTEGER :: i, j
+        REAL :: r, s
+        WRITE(6,*) "geoms", n_geoms
+        WRITE(6,*) "cvs", n_cv
+        DO
+                READ(5,*) cmd
+                SELECT CASE (cmd)
+                        CASE ("quit")
+                                WRITE(6,*) "ok"
+                                EXIT
+                        CASE ("setup")
+                                WRITE(6,*) "k, lambda"
+                                READ(5,*) k, lambda
+                        CASE ("geom_plane")
+                                WRITE(6,*) "id, center, avec, bvec, res"
+                                READ(5,*) i, center, avec, bvec, res
+                                CALL geom_plane(center, avec, bvec, res, geoms(i)%geom)
+                        CASE ("geom_line")
+                                WRITE(6,*) "id, center, avec, res"
+                                READ(5,*) i, center, avec, res(1)
+                                CALL geom_line(center, avec, res(1), geoms(i)%geom)
+                        CASE ("geom_load")
+                                WRITE(6,*) "id, path, nPoints" !isMeas
+                                READ(5,*) i, path, j
+                                CALL geom_load(path, .TRUE., j, geoms(i)%geom)
+                        CASE ("tm_gen")
+                                WRITE(6,*) "geomIdA, geomIdB"
+                                READ(5,*) i, j
+                                CALL tm_gen(geoms(i)%geom, geoms(j)%geom, k, tm)
+                        CASE ("tm_save")
+                                WRITE(6,*) "path"
+                                READ(5,*) path
+                                CALL tm_save(path, tm)
+                        CASE ("tm_load")
+                                WRITE(6,*) "path, lenA, lenB"
+                                READ(5,*) path, i, j
+                                CALL tm_load(path, i, j, tm)
+                        CASE ("tm_use")
+                                WRITE(6,*) "inCVId, outCVId"
+                                READ(5,*) i, j
+                                ALLOCATE(cv(j)%v(SIZE(tm,2)))
+                                cv(j)%v = MATMUL(tm, cv(i)%v)
+                        CASE ("cv_const")
+                                WRITE(6,*) "CVId, length, value"
+                                READ(5,*) i, j, r
+                                ALLOCATE(cv(i)%v(j))
+                                cv(i)%v = r
+                        CASE ("cv_mult")
+                                WRITE(6,*) "CVId, real, imag"
+                                READ(5,*) i, r, s
+                                cv(i)%v = cv(i)%v * CMPLX(r,s)
+                        CASE ("cv_stack")
+                                WRITE(6,*) "CVId_in1, CVId_in2, CVId_out"
+                                READ(5,*) res, i
+                                ALLOCATE(cv(i)%v(SIZE(cv(res(1))%v) + SIZE(cv(res(2))%v)))
+                                cv(i)%v(:SIZE(cv(res(1))%v)) = cv(res(1))%v
+                                cv(i)%v(SIZE(cv(res(1))%v):) = cv(res(2))%v
+                        CASE ("free")
+                                WRITE(6,*) "Id (+for cv, -for path, 0 for tm)"
+                                READ(5,*) i
+                                IF (i > 0) THEN
+                                        DEALLOCATE(cv(i)%v)
+                                ELSE IF (i < 0) THEN
+                                        DEALLOCATE(geoms(-i)%geom)
+                                ELSE
+                                        DEALLOCATE(tm)
+                                END IF
+                        CASE ("result")
+                                WRITE(6,*) "CVId, Path"
+                                READ(5,*) i, path
+                                CALL result_save(path, cv(i)%v)
+                        CASE DEFAULT
+                                WRITE(6,*) "unrecognised command: ", cmd
+                                CYCLE
+                END SELECT
+                WRITE(6,*) "ok"
         END DO
-        CLOSE(10)
-END PROGRAM test
+END PROGRAM
 
-SUBROUTINE save_tm(Id, k, tm)
+SUBROUTINE result_save(Path, cr)
         IMPLICIT NONE
-        REAL, INTENT(IN) :: k
-        CHARACTER(LEN=*), INTENT(IN) :: Id
-        COMPLEX, ALLOCATABLE, INTENT(IN) :: tm(:,:)
-        OPEN(10, status='replace', file=Id, form='unformatted')
-        WRITE(10) tm
-        CLOSE(10)
-END SUBROUTINE
-
-SUBROUTINE load_tm(Id, asize, bsize, k, tm)
-        IMPLICIT NONE
-        REAL, INTENT(IN) :: k
-        INTEGER, INTENT(IN) :: asize, bsize
-        CHARACTER(LEN=*), INTENT(IN) :: Id
-        COMPLEX, ALLOCATABLE, INTENT(OUT) :: tm(:,:)
-        ALLOCATE(tm(bsize,asize))
-        OPEN(10, status='old', file=Id, form='unformatted')
-        READ(10) tm
+        CHARACTER(LEN=*), INTENT(IN) :: Path
+        COMPLEX, ALLOCATABLE, INTENT(IN) :: cr(:)
+        INTEGER :: reclen
+        REAL :: r(SIZE(cr))
+        r = ABS(cr)**2
+        INQUIRE(iolength=reclen)r
+        OPEN(10, file=Path, form='unformatted', access='direct', recl=reclen)
+        WRITE(10,rec=1) r
         CLOSE(10)
 END SUBROUTINE
