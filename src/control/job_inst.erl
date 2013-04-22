@@ -80,7 +80,7 @@ job_to_ins(Job) ->
 		{[Result | Results], NewIns}
 	end,
 	{Results, Ins} = lists:foldl(For_Measure, {[], new_ins()}, Measures),
-	{Start, {_, AllIns}} = add_in(ok, Results, Ins),
+	{Start, {_, AllIns}} = add_in(tmvm:done(), Results, Ins),
 	{Start, AllIns}.
 
 add_in(In, Deps, {Od, Dg}) ->
@@ -100,16 +100,16 @@ add_in(In, Deps, {Od, Dg}) ->
 paths_to_in(Paths, Existing) ->
 	{Insts, TmIns} = lists:foldl(fun path_to_tm_instructions/2, {Existing, orddict:new()}, Paths),
 	G = fun(Path, {Acc, Ins}) ->
-		P = add_in(#p{p="Piss"}, [], Ins),
+		P = add_in(tmvm:u()), [], Ins),
 		{Result, NewIns} = path_to_p_ins(Path, TmIns, P),
 		{[Result | Acc], NewIns}
 	end,
 	{ToSum, InstsP} = lists:foldl(G, {[], Insts}, Paths),
-	add_in(sum, ToSum, InstsP).
+	add_in(tmvm:sum(), ToSum, InstsP).
 	
 path_to_p_ins([A, B], Tms, {P, Ins}) ->
 	Tm = orddict:fetch([A, B], Tms),
-	add_in(p, [Tm, P], Ins);
+	add_in(tmvm:p(), [Tm, P], Ins);
 path_to_p_ins([A, B | Tail], Tms, Acc) ->
 	path_to_p_ins([B | Tail], Tms, path_to_p_ins([A, B], Tms, Acc)).
 
@@ -119,9 +119,9 @@ path_to_tm_instructions([A, B], {Ins, Acc}) ->
 		{ok, _} ->
 			{Ins, Acc};
 		error ->
-			{AI, InsA} = add_in(geom_load(A), [], Ins),
-			{BI, InsB} = add_in(geom_load(B), [], InsA),
-			{In, NewIns} = add_in(#tm{size={A,B}}, [AI, BI], InsB),
+			{AI, InsA} = add_in(tmvm:geom(A), [], Ins),
+			{BI, InsB} = add_in(tmvm:geom(B), [], InsA),
+			{In, NewIns} = add_in(tmvm:tm(A,B)}, [AI, BI], InsB),
 			{NewIns, orddict:store(Step, In, Acc)}
 	end;
 path_to_tm_instructions([A, B | Tail], Acc) ->

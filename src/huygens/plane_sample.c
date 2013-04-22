@@ -17,9 +17,9 @@ void sample(const vector const scanstart, const vector const xoutput, const vect
 		//scan x delta
 		for (j = 0; j < xsamples; j++) {
 			grid[j][i] = pow(pressure(s, pos, 0), 2); //THIS IS JUST FOR t=0 VERY UNGENERAL
+			grid[j][i] += pow(pressure(s, pos, M_PI/4), 2); //THIS IS JUST FOR t=0 VERY UNGENERAL
 			grid[j][i] += pow(pressure(s, pos, M_PI/2), 2); //THIS IS JUST FOR t=0 VERY UNGENERAL
-			grid[j][i] += pow(pressure(s, pos, M_PI), 2); //THIS IS JUST FOR t=0 VERY UNGENERAL
-			grid[j][i] += pow(pressure(s, pos, (3*M_PI)/2), 2); //THIS IS JUST FOR t=0 VERY UNGENERAL
+			grid[j][i] += pow(pressure(s, pos, (3*M_PI)/4), 2); //THIS IS JUST FOR t=0 VERY UNGENERAL
 			Vadd(pos, pos, ydelta);
 		}
 	}

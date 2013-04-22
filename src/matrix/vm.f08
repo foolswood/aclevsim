@@ -1,5 +1,5 @@
-!Transfer matrix generator
-PROGRAM test
+!Transfer matrix high level VM
+PROGRAM vm
         IMPLICIT NONE
         TYPE geom
                 REAL, ALLOCATABLE :: geom(:,:)
@@ -111,6 +111,10 @@ PROGRAM test
                                 ALLOCATE(cv(i)%v(SIZE(cv(res(1))%v) + SIZE(cv(res(2))%v)))
                                 cv(i)%v(:SIZE(cv(res(1))%v)) = cv(res(1))%v
                                 cv(i)%v(SIZE(cv(res(1))%v):) = cv(res(2))%v
+                        CASE ("cv_add")
+                                WRITE(6,*) "CVAcc, CVIn"
+                                READ(5,*) i, j
+                                cv(i)%v = cv(i)%v + cv(j)%v
                         CASE ("free")
                                 WRITE(6,*) "Id (+for cv, -for path, 0 for tm)"
                                 READ(5,*) i
